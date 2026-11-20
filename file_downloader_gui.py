@@ -9,17 +9,22 @@ import re
 import time
 import threading
 import hashlib
+import json
 from collections import deque
 from urllib.parse import urljoin, urlparse, urldefrag
 from tkinter import Tk, Label, Entry, Button, Text, Scrollbar, Frame, StringVar, filedialog, messagebox
+from tkinter import ttk
 import requests
 from bs4 import BeautifulSoup
+
+HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".file_downloader_history.json")
+SEED_URL = "https://ftp.idu.ac.id/wp-content/uploads/ebook/"
 
 class FileDownloaderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("URL File Downloader")
-        self.root.geometry("700x500")
+        self.root.geometry("700x520")
 
         # Variables
         self.url_var = StringVar()
@@ -27,11 +32,14 @@ class FileDownloaderApp:
         self.folder_var = StringVar(value=os.getcwd())
         self.running = False
         self.stop_flag = False
+        self.history = self.load_history()
 
         # GUI Layout
         Frame(root).pack(fill="x", padx=10, pady=5)
         Label(root, text="Start URL:").pack(anchor="w", padx=10)
-        Entry(root, textvariable=self.url_var, width=80).pack(fill="x", padx=10, pady=2)
+        self.url_combo = ttk.Combobox(root, textvariable=self.url_var, width=78)
+        self.url_combo.pack(fill="x", padx=10, pady=2)
+        self.update_history_combo()
 
         Label(root, text="File extension (default: pdf):").pack(anchor="w", padx=10)
         Entry(root, textvariable=self.ext_var, width=20).pack(anchor="w", padx=10, pady=2)
@@ -97,6 +105,9 @@ class FileDownloaderApp:
         self.log(f"Starting crawl from: {url}")
         self.log(f"Looking for: .{ext} files")
         self.log(f"Saving to: {folder}")
+
+        # Add to history
+        self.add_to_history(url)
 
         thread = threading.Thread(target=self.crawl_and_download, args=(url, ext, folder), daemon=True)
         thread.start()
@@ -224,6 +235,37 @@ class FileDownloaderApp:
             while chunk := f.read(chunk_size):
                 h.update(chunk)
         return h.hexdigest()
+
+    def load_history(self):
+        try:
+            if os.path.exists(HISTORY_FILE):
+                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        return data
+        except Exception:
+            pass
+        return [SEED_URL]
+
+    def save_history(self):
+        try:
+            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.history, f, indent=2)
+        except Exception:
+            pass
+
+    def update_history_combo(self):
+        self.url_combo["values"] = self.history
+        if self.history and not self.url_var.get():
+            self.url_var.set(self.history[0])
+
+    def add_to_history(self, url):
+        if url in self.history:
+            self.history.remove(url)
+        self.history.insert(0, url)
+        self.history = self.history[:50]  # keep last 50
+        self.save_history()
+        self.update_history_combo()
 
 if __name__ == "__main__":
     root = Tk()
